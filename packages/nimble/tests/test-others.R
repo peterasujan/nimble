@@ -11,5 +11,6 @@ test_package('nimble', 'meta')
 ##test_package('nimble', 'models')
 ##test_package('nimble', 'trunc')
 test_package('nimble', 'user')
+test_package('nimble', 'importance')
 
 warnings()
