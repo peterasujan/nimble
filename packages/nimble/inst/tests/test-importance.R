@@ -1,8 +1,4 @@
-library(nimble)
-library(testthat)
-source('importance.R')
-
-context("importance sampling")
+context("Testing importance sampling")
 
 betaBernCode <- nimbleCode({
     for (i in 1:SAMPS) {
