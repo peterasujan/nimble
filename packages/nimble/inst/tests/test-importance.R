@@ -65,3 +65,36 @@ quantilesCompare <- qbeta(p = 1:99 / 100, shape1 = postAlpha, shape2 = postBeta)
 test_that("quantiles of sample match those of analytic posterior", {
     expect_equal(resampQuantiles, quantilesCompare, tolerance = 0.01)
 })
+
+## Test against MCMC on BUGS models
+pumpModel <- readBUGSmodel('pump', dir = getBUGSexampleDir('pump'))
+compiled_pumpModel <- compileNimble(pumpModel)
+# pumpMCMC <- buildMCMC(pumpModel)
+
+pumpMCMCconfig <- configureMCMC(pumpModel)
+pumpMCMCconfig$removeSamplers(c('theta', 'beta'))
+pumpMCMC <- buildMCMC(pumpMCMCconfig)
+compiled_pumpMCMC <- compileNimble(pumpMCMC, project = pumpModel)
+compiled_pumpMCMC$run(100000)
+mcmcSamps <- as.matrix(compiled_pumpMCMC$mvSamples)
+
+propCode <- nimbleCode({
+  alpha ~ dexp(1)
+})
+
+propModel <- nimbleModel(propCode)
+compiled_propModel <- compileNimble(propModel)
+
+pumpSampler <- buildImportanceSampler(pumpModel, propModel, c("alpha"))
+compiled_pumpSampler <- compileNimble(pumpSampler, project = pumpModel)
+
+compiled_pumpSampler$run(100000)
+isSamps <- as.matrix(compiled_pumpSampler$mvResamps)
+
+test_that("Means are equal for pump model", {
+  expect_equal(mean(isSamps[, 'alpha']), mean(mcmcSamps[, 'alpha']), tolerance = 0.01)
+})
+
+test_that("Variances are equal for pump model", {
+  expect_equal(var(isSamps[, 'alpha']), var(mcmcSamps[, 'alpha']), tolerance = 0.05)
+})
