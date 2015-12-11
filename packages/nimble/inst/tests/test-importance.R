@@ -22,7 +22,7 @@ propModel <- nimbleModel(propCode,
                          inits = list(alpha = 1, beta = 1))
 
 
-sampler <- importance_sampler(betaBernModel, propModel, c("p"))
+sampler <- buildImportanceSampler(betaBernModel, propModel, c("p"))
 
 CbetaBern <- compileNimble(betaBernModel)
 Cprop <- compileNimble(propModel)
@@ -34,14 +34,14 @@ s <- as.numeric(Csampler$mvSamps["p"])
 hist(s)
 ## resample <- sample(s, prob = w, replace = TRUE)
 resample <- as.numeric(Csampler$mvResamps["p"])
-hist(resample, freq = FALSE)
+## hist(resample, freq = FALSE)
 
 t <- sum(x)
 n <- length(x)
 postAlpha <- 10 + t
 postBeta <- 30 + n - t
 postSample <- rbeta(10000, shape1 = postAlpha, shape2 = postBeta)
-curve(dbeta(x, postAlpha, postBeta), add = TRUE) ## analytic posterior
+## curve(dbeta(x, postAlpha, postBeta), add = TRUE) ## analytic posterior
 
 
 postAlpha / (postAlpha + postBeta) ## analytic posterior mean

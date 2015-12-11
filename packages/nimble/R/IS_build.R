@@ -5,8 +5,8 @@
 #' @param target The nodes to be sampled.
 #'
 #' @author Peter Sujan
-#' 
-importance_sampler <- nimbleFunction(
+#' @export
+buildImportanceSampler <- nimbleFunction(
     setup = function(model, propModel, target, silent = FALSE) {
         targetVars <- unique(removeIndexing(target))
         modelSymbolObjects <- model$getSymbolTable()$getSymbolObjects()
@@ -43,5 +43,6 @@ importance_sampler <- nimbleFunction(
         rankSample(weightsVector, niter, ids, silent)
         for (i in 1:niter)
             nimCopy(from = mvSamps, to = mvResamps, nodes = target, row = ids[i], rowTo = i, logProb = FALSE)
-    }
+    },
+    where = getLoadingNamespace()
 )
