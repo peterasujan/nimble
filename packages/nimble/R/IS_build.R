@@ -17,6 +17,7 @@ buildImportanceSampler <- nimbleFunction(
                                        types = c('double', 'double'),
                                        sizes = list(weight = 1, normWeight = 1))
         weights <- modelValues(weightsSpec)
+        calcNodes  <- model$getDependencies(target)
     },
 
     ## reset is currently unused (might want to allow repeated re-samples without
@@ -31,7 +32,7 @@ buildImportanceSampler <- nimbleFunction(
             simulate(propModel)
             nimCopy(from = propModel, to = mvSamps, nodes = target, row = i, logProb = FALSE)
             nimCopy(from = propModel, to = model, nodes = target, logProb = FALSE)
-            currentWeight <- exp(calculate(model) - calculate(propModel))
+            currentWeight <- exp(calculate(model, calcNodes) - calculate(propModel, calcNodes))
             weights['weight', i][1] <<- currentWeight
             weightsVector[i] <- currentWeight
         }

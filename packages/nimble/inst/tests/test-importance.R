@@ -67,6 +67,8 @@ test_that("quantiles of sample match those of analytic posterior", {
 })
 
 ## Test against MCMC on BUGS models
+
+## Pump Model
 pumpModel <- readBUGSmodel('pump', dir = getBUGSexampleDir('pump'))
 compiled_pumpModel <- compileNimble(pumpModel)
 # pumpMCMC <- buildMCMC(pumpModel)
@@ -97,4 +99,55 @@ test_that("Means are equal for pump model", {
 
 test_that("Variances are equal for pump model", {
   expect_equal(var(isSamps[, 'alpha']), var(mcmcSamps[, 'alpha']), tolerance = 0.05)
+})
+
+test_that("Medians are equal for pump model", {
+  expect_equal(median(isSamps[, 'alpha']), median(mcmcSamps[, 'alpha']), tolerance = 0.01)
+})
+
+## Seeds Model
+seedsModel <- readBUGSmodel('seeds', dir = getBUGSexampleDir('seeds'))
+compiled_seedsModel <- compileNimble(seedsModel)
+# pumpMCMC <- buildMCMC(pumpModel)
+
+seedsMCMCconfig <- configureMCMC(seedsModel)
+seedsMCMCconfig$removeSamplers(c('b', 'alpha1', 'alpha2', 'alpha12', 'tau'))
+seedsMCMC <- buildMCMC(seedsMCMCconfig)
+compiled_seedsMCMC <- compileNimble(seedsMCMC, project = seedsModel)
+compiled_seedsMCMC$run(10000)
+mcmcSamps <- as.matrix(compiled_seedsMCMC$mvSamples)
+
+propCode <- nimbleCode({
+  alpha0  ~ dnorm(0.0,1.0e-1);  # intercept
+#   alpha1  ~ dnorm(0.0,1.0e-1);  # seed coeff
+#   alpha2  ~ dnorm(0.0,1.0e-2);  # extract coeff
+#   alpha12 ~ dnorm(0.0,1.0e-2);
+#   tau     ~ dgamma(1.0e-1,1.0e-3);    # 1/sigma^2
+})
+
+propModel <- nimbleModel(propCode)
+
+compiled_propModel <- compileNimble(propModel)
+
+seedsSampler <- buildImportanceSampler(seedsModel, propModel,
+                                     c('alpha0'))
+compiled_seedsSampler <- compileNimble(seedsSampler, project = seedsModel,
+                                     resetFunctions = TRUE)
+
+compiled_seedsSampler$run(10000)
+isSamps <- as.matrix(compiled_seedsSampler$mvResamps)
+w <- as.matrix(compiled_seedsSampler$weights)
+
+test_that("Means are equal for seeds model", {
+  expect_equal(mean(isSamps[, 'alpha0']), mean(mcmcSamps[, 'alpha0']),
+               tolerance = 0.05)
+})
+
+test_that("Variances are equal for seeds model", {
+  expect_equal(var(isSamps[, 'alpha0']), var(mcmcSamps[, 'alpha0']), tolerance = 0.05)
+})
+
+test_that("Medians are equal for seeds model", {
+  expect_equal(median(isSamps[, 'alpha0']), median(mcmcSamps[, 'alpha0']),
+               tolerance = 0.05)
 })
