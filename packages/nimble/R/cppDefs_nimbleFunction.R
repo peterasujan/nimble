@@ -173,6 +173,12 @@ cppNimbleFunctionClass <- setRefClass('cppNimbleFunctionClass',
                                                       RCfunDefs[[RCname]] <<- functionDefs[[RCname]]
                                                   }
                                               },
+                                              addTypeTemplateFunction = function( funName ) {
+                                                  newFunName <- if(funName == 'operator()') 'run_AD_' else paste0(funName, '_AD_')
+                                                  regularFun <- RCfunDefs[[funName]]
+                                                  functionDefs[[newFunName]] <- regularFun$makeTypeTemplateFunction(newFunName)
+                                                  invisible(NULL)
+                                              },
                                               buildCmultiInterface = function(dll = NULL) {
                                                   sym <- if(!is.null(dll))
                                                              getNativeSymbolInfo(SEXPgeneratorFun$name, dll)

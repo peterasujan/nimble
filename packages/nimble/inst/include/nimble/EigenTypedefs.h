@@ -7,6 +7,12 @@ using namespace Eigen;
 typedef Stride<Dynamic, Dynamic> EigStrDyn;
 typedef Map<MatrixXd, Unaligned, EigStrDyn > EigenMapStr;
 
+template <class Type>
+struct EigenTemplateTypes {
+  typedef Matrix<Type, Dynamic, Dynamic> typeMatrixXd;
+  typedef Map<typeMatrixXd, Unaligned, EigStrDyn > typeEigenMapStr;
+};
+
 template <typename Derived1, typename Derived2>
 double eigenInprod(const ArrayBase<Derived1>& v1, const ArrayBase<Derived2>& v2) { 
   double ans = (v1 * v2).sum();

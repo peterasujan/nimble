@@ -71,6 +71,15 @@ RCfunctionDef <- setRefClass('RCfunctionDef',
                                      returnType <<- RCfunProc$compileInfo$returnSymbol$genCppVar()
                                      invisible(NULL)
                                  },
+                                 makeTypeTemplateFunction = function(newName) { ## called from an existing version of the cppFunctionDef and returns a separate one
+                                     newCppFunDef <- RCfunctionDef$new()
+                                     newCppFunDef$name <<- newName
+                                     newCppFunDef$args <<- symbolTable2templateTypeSymbolTable(.self$args)
+                                     localArgs <- symbolTable2templateTypeSymbolTable(.self$code$objectDefs)
+                                     newCppFunDef$returnType <<- cppVarSym2templateTypeCppVarSym(.self$returnType)
+                                     newCppFunDef$code <<- cppCodeBlock(code = .self$code$code, objectDefs = localArgs)
+                                     newCppFunDef
+                                 },
                                  buildRwrapperFunCode = function(className = NULL, eval = FALSE, includeLHS = TRUE, returnArgsAsList = TRUE, includeDotSelf = '.self', env = globalenv(), dll = NULL, includeDotSelfAsArg = FALSE) {
                                      returnVoid <- returnType$baseType == 'void'
                                      asMember <- !is.null(className)
