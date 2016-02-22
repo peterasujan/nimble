@@ -197,34 +197,36 @@ cppFunctionDef <- setRefClass('cppFunctionDef',
                                   code = 'ANY',	#	'cppCodeBlock',
                                   externC = 'ANY',
                                   virtual = 'ANY',
-                                  abstract = 'ANY'
+                                  abstract = 'ANY',
+                                  template = 'ANY'
                                             ),
                               methods = list(
                                   initialize = function(...) {
-                                  	  name <<- character()
+                                      name <<- character()
                                       CPPincludes <<- as.list( c(CPPincludes, '<iostream>') )
                                       callSuper(...)
                                       if(inherits(virtual, 'uninitializedField')) virtual <<- FALSE
                                       if(inherits(abstract, 'uninitializedField')) abstract <<- FALSE
+                                      if(inherits(template, 'uninitializedField')) template <<- NULL                                          
                                   },
                                   generate = function(declaration = FALSE, scopes = character(), ...) {
                                       if(inherits(args, 'uninitializedField')) args <<- list()
                                       argsToUse <- if(inherits(args, 'symbolTable')) args$symbols else args
                                       if(declaration) {
-                                          outputCode <- paste0(if(virtual) 'virtual ' else character(0), generateFunctionHeader(returnType, name, argsToUse, scopes, ...), if(abstract) '= 0' else character(0), ';')
+                                          outputCode <- paste0(if(virtual) 'virtual ' else character(0),
+                                                               generateFunctionHeader(returnType, name, argsToUse, scopes, template, ...),
+                                                               if(abstract) '= 0' else character(0), ';')
                                           if(!inherits(externC, 'uninitializedField' ) ){
                                             if(externC == TRUE)
                                               outputCode <- paste0('extern "C" ', outputCode)
                                           }
                                            return(outputCode) 
-                                          
-                                          
                                       } else {
                                           if(inherits(code$code, 'uninitializedField')) {
                                               ## There is no code. This can occur for a nimbleFunctionVirtual, which is an abstract base class.
                                               return(character(0))
                                           }
-                                          c(paste(generateFunctionHeader(returnType, name, argsToUse, scopes, ...), '{'),
+                                          c(paste(generateFunctionHeader(returnType, name, argsToUse, scopes, template, ...), '{'),
                                             code$generate(...),
                                             list('}'))
                                       }
@@ -232,10 +234,13 @@ cppFunctionDef <- setRefClass('cppFunctionDef',
                                   )
                               )
 
-generateFunctionHeader <- function(returnType, name, args, scopes = character()) {
-    list(paste(returnType$generate(printName = character()), paste(c(scopes, name), collapse = '::'), '(',
-          paste(unlist(lapply(args, function(x) x$generate())), collapse = ', '),
-          ')'))
+generateFunctionHeader <- function(returnType, name, args, scopes = character(), template = NULL) {
+    list(if(is.null(template)) NULL else paste(template$generate(),'\n'),
+         paste(returnType$generate(printName = character()),
+               paste(c(scopes, name), collapse = '::'),
+               '(',
+               paste(unlist(lapply(args, function(x) x$generate())), collapse = ', '),
+               ')'))
 }
 
 generateClassHeader <- function(ns, inheritance) {

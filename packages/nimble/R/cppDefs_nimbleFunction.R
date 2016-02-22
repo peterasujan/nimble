@@ -176,7 +176,14 @@ cppNimbleFunctionClass <- setRefClass('cppNimbleFunctionClass',
                                               addTypeTemplateFunction = function( funName ) {
                                                   newFunName <- if(funName == 'operator()') 'run_AD_' else paste0(funName, '_AD_')
                                                   regularFun <- RCfunDefs[[funName]]
-                                                  functionDefs[[newFunName]] <- regularFun$makeTypeTemplateFunction(newFunName)
+                                                  functionDefs[[newFunName]] <<- makeTypeTemplateFunction(newFunName, regularFun)
+                                                  invisible(NULL)
+                                              },
+                                              addADtapingFunction = function( funName ) {
+                                                  ADfunName <- if(funName == 'operator()') 'run_AD_' else paste0(funName, '_AD_')
+                                                  regularFun <- RCfunDefs[[funName]]
+                                                  newFunName <- 'callForADtaping'
+                                                  functionDefs[[newFunName]] <<- makeADtapingFunction(newFunName, regularFun, ADfunName)
                                                   invisible(NULL)
                                               },
                                               buildCmultiInterface = function(dll = NULL) {

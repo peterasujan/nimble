@@ -71,15 +71,6 @@ RCfunctionDef <- setRefClass('RCfunctionDef',
                                      returnType <<- RCfunProc$compileInfo$returnSymbol$genCppVar()
                                      invisible(NULL)
                                  },
-                                 makeTypeTemplateFunction = function(newName) { ## called from an existing version of the cppFunctionDef and returns a separate one
-                                     newCppFunDef <- RCfunctionDef$new()
-                                     newCppFunDef$name <<- newName
-                                     newCppFunDef$args <<- symbolTable2templateTypeSymbolTable(.self$args)
-                                     localArgs <- symbolTable2templateTypeSymbolTable(.self$code$objectDefs)
-                                     newCppFunDef$returnType <<- cppVarSym2templateTypeCppVarSym(.self$returnType)
-                                     newCppFunDef$code <<- cppCodeBlock(code = .self$code$code, objectDefs = localArgs)
-                                     newCppFunDef
-                                 },
                                  buildRwrapperFunCode = function(className = NULL, eval = FALSE, includeLHS = TRUE, returnArgsAsList = TRUE, includeDotSelf = '.self', env = globalenv(), dll = NULL, includeDotSelfAsArg = FALSE) {
                                      returnVoid <- returnType$baseType == 'void'
                                      asMember <- !is.null(className)
@@ -249,6 +240,18 @@ toSEXPscalarConvertFunctions <- list(double  = 'double_2_SEXP',
                                      integer = 'int_2_SEXP',
                                      logical = 'bool_2_SEXP',
                                      character = 'string_2_STRSEXP')
+
+makeTypeTemplateFunction = function(newName, .self) { ## called from an existing version of the cppFunctionDef and returns a separate one
+    newCppFunDef <- RCfunctionDef$new()
+    newCppFunDef$name <- newName
+    newCppFunDef$template <- cppVarFull(name = character(), baseType = 'template', templateArgs = list('class TYPE_'))
+    newCppFunDef$args <- symbolTable2templateTypeSymbolTable(.self$args, addRef = TRUE)
+    localArgs <- symbolTable2templateTypeSymbolTable(.self$code$objectDefs)
+    newCppFunDef$returnType <- cppVarSym2templateTypeCppVarSym(.self$returnType)
+    newCppFunDef$code <- cppCodeBlock(code = .self$code$code, objectDefs = localArgs)
+    newCppFunDef
+},
+
 
 buildCopyLineFromSEXP <- function(fromSym, toSym) {
     if(inherits(toSym, 'symbolBasic')) {

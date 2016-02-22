@@ -65,6 +65,7 @@ Collate: config.R
  cppDefs_variables.R
  cppDefs_core.R
  cppDefs_namedObjects.R
+ cppDefs_ADtools.R
  cppDefs_BUGSmodel.R
  cppDefs_RCfunction.R
  cppDefs_nimbleFunction.R

@@ -17,11 +17,11 @@ public:
   virtual void callFunction(vector< AD<double> > &ADindependentVars, vector< AD<double> > &ADresponseVars)=0;
 };
 
-void ADtapes::recordTape(int NumIndependentVars, int NumResponseVars) { //permanent
+void ADtapes::recordTape() { //permanent
   vector< AD<double> > ADindependentVars;
   vector< AD<double> > ADresponseVars;
-  ADindependentVars.resize(NumIndependentVars);
-  ADresponseVars.resize(NumResponseVars);
+  //ADindependentVars.resize(NumIndependentVars); // let callFunction resize these, since it knows the relevant sizes
+  //ADresponseVars.resize(NumResponseVars);
   CppAD::ADFun<double> *ADtapePtr = new CppAD::ADFun<double>;
   callFunction(ADindependentVars, ADresponseVars); // this can expand to call multiple class methods via an integer argument
   //  ADtapePtr = new CppAD::ADFun<double>(ADindependentVars, ADresponseVars);
