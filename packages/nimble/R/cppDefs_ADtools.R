@@ -1,3 +1,5 @@
+## Convert one symbol object for a C++ var into a symbol object for C++ templated CppAD code
+# See symbolTable2templateTypeSymbolTable
 cppVarSym2templateTypeCppVarSym <- function(oldSym, addRef = FALSE) {
     newSym <- oldSym$copy()
     if(newSym$baseType == 'double') {
@@ -19,6 +21,11 @@ cppVarSym2templateTypeCppVarSym <- function(oldSym, addRef = FALSE) {
     newSym
 }
 
+## Convert a symbol table for C++ vars into a symbol table for C++ for templated CppAD code
+## For CppAD, we wrap C++ code in template<class TYPE_> 
+## and replace any double with TYPE_
+## This includes NimArr<nDim, double> with NimArr<nDim, TYPE_>
+## and similar treatmnt for Eigen templated types.
 symbolTable2templateTypeSymbolTable <- function(symTab, addRef = FALSE) {
     newSymTab <- symbolTable()
     symNames <- symTab$getSymbolNames()
@@ -30,7 +37,27 @@ symbolTable2templateTypeSymbolTable <- function(symTab, addRef = FALSE) {
     newSymTab
 }
 
-## does some work similar to BUGScontextClass::embedCodeInForLoop
+## This makes a Cpp function definition object wrapped in template<class TYPE_> and with
+## doubles converted to TYPE_s (including in templated use if NimArr and Eigen).
+## This is called from an existing version of the cppFunctionDef and returns a separate one
+makeTypeTemplateFunction = function(newName, .self) { 
+    newCppFunDef <- RCfunctionDef$new()
+    newCppFunDef$name <- newName
+    newCppFunDef$template <- cppVarFull(name = character(), baseType = 'template', templateArgs = list('class TYPE_'))
+    newCppFunDef$args <- symbolTable2templateTypeSymbolTable(.self$args, addRef = TRUE)
+    localArgs <- symbolTable2templateTypeSymbolTable(.self$code$objectDefs)
+    newCppFunDef$returnType <- cppVarSym2templateTypeCppVarSym(.self$returnType)
+    newCppFunDef$code <- cppCodeBlock(code = .self$code$code, objectDefs = localArgs)
+    newCppFunDef
+}
+
+
+## Generate a block of code for copying to or from CppAD objects, to or from original C++ objects
+## On the CppAD side, we are always flattening to 1D.
+##
+## The code this generates is embedded in the ADtapingFunction made by makeADtapingFunction
+##
+## Note this does some work similar to BUGScontextClass::embedCodeInForLoop
 makeCopyingCodeBlock <- function(LHSvar, RHSvar, indexList, indicesRHS = TRUE, incrementIndex) {
     indexNames <- names(indexList)
     indexedBracketExpr <- do.call('call', c(list('[', as.name('TO_BE_REPLACED')), lapply(indexNames, as.name)), quote = TRUE)
@@ -48,4 +75,147 @@ makeCopyingCodeBlock <- function(LHSvar, RHSvar, indexList, indicesRHS = TRUE, i
         innerCode <- newForLoop
     }
     innerCode
+}
+
+## This makes the function to be called once for CppAD taping
+## It sets up AD variables, copies from regular variables into them
+## calls the templated version of the member function
+## copies the results back out.
+## Not that values in the regular variables are not really important during taping.
+## Currently those values are intialized to 0.5, which should satisfy needs for (-inf, inf), [0, inf) and [0, 1].
+## Ending the tape is not done here.  That is done from the calling function
+## (which is in permanent C++, not generated from R)
+## We do not assume that in the target function the arguments are independent variables and the
+## returned value is the dependent variable.  Those are set by the independentVarNames and dependentVarNames
+makeADtapingFunction <- function(newFunName = 'callForADtaping', targetFunDef, ADfunName, independentVarNames, dependentVarNames) {
+    ## Make new function definition to call for taping (CFT)
+    CFT <- RCfunctionDef$new()
+    CFT$returnType <- cppVoid()
+    CFT$name <- newFunName
+    ## args will always be same; these do not depend on
+    CFT$args <- symbolTable()
+    ## create vector< AD<double> > ADindependentVars
+    ADindependentVarsSym <- cppVarFull(name = 'ADindependentVars', baseType = 'vector', templateArgs = list( cppVarFull(baseType = 'AD', templateArgs = 'double', name = character()) ), ref = TRUE)
+    ## create vector< AD<double> ADresponseVars
+    ADdependentVarsSym <- cppVarFull(name = 'ADresponseVars', baseType = 'vector', templateArgs = list( cppVarFull(baseType = 'AD', templateArgs = 'double', name = character()) ), ref = TRUE)
+    ## Add them to arguments symbol table
+    CFT$args$addSymbol( ADindependentVarsSym )
+    CFT$args$addSymbol( ADdependentVarsSym )
+
+    ## Make local AD variables for all function inputs and outputs
+    ## e.g. if the original targetFun takes NimArr<1, double>, it's templated CppAD version will take NimArr<1, TYPE_>
+    ## Next line creates local variables for passing to that templated CppAD version
+    localVars <- symbolTable2templateTypeSymbolTable(targetFunDef$args, clearRef = TRUE, replacementBaseType = 'AD', replacementTemplateArgs = list('double') )
+    ## and similar for the return variable
+    ansSym <- cppVarSym2templateTypeCppVarSym(targetFunDef$returnType, clearRef = TRUE, replacementBaseType = 'AD', replacementTemplateArgs = list('double'))
+    ansSym$name <- 'ANS_'
+    localVars$addSymbol(ansSym)
+    symNames <- localVars$getSymbolNames()
+    
+    ## set up a set of index variables for copying code, up to six to be arbitrary (allowing up to 6-dimensional nimble objects to be handled)
+    indexVarNames <- paste0(letters[9:14],'_')
+    for(ivn in indexVarNames)
+        localVars$addSymbol( cppVar(name = ivn, baseType = 'int') )    
+    
+    ## set any sizes, which must be known
+    nimbleSymTab <- targetFunDef$RCfunProc$compileInfo$newLocalSymTab
+
+    ## This creates lines like setSize(z, 2 3)
+    ## which the C++ output generator turns into something like z.resize(2, 3)
+    setSizeLines <- vector('list', length(symNames) + 2) ## extra 2 are for the ADindependentVars and ADdependentVars
+    iNextLine <- 1
+    for(iSym in seq_along(symNames)) {
+        thisSymName <- symNames[iSym]
+        if(thisSymName == 'ANS_') {
+            thisSym <- targetFunDef$RCfunProc$compileInfo$returnSymbol
+        } else {
+            thisSym <- nimbleSymTab$getSymbolObject(symNames[iSym])
+        }
+        if(thisSym$nDim > 0) {
+            setSizeCall <- do.call('call',c(list('setSize', quote(as.name(thisSymName))), as.list(thisSym$size))) 
+            setSizeLines[[iNextLine]] <- setSizeCall ##nimble:::RparseTree2ExprClasses(setSizeCall)
+            iNextLine <- iNextLine + 1
+        } else {
+            setSizeLines[[iNextLine]] <- NULL
+        }
+    }
+    
+    ## call CppAD::Independent(ADindependentVars)
+    ## This starts CppADs taping system
+    CppADindependentCode <- quote(`CppAD::Independent`(ADindependentVars)) ##nimble:::RparseTree2ExprClasses(quote(`CppAD::Independent`(ADindependentVars)))
+
+    ## make copying blocks into independent vars
+    ## This looks like e.g.
+    ## for(i_ in 1:3) {ADindependentVars[netIncrement_] = x[i]; netIncrement_ <- netIncrement + 1;}
+    numIndependentVars <- length(independentVarNames)
+    copyIntoIndepVarCode <- vector('list', numIndependentVars+1)
+    ## create the netIncrement_ variable and code to initialize it to 1
+    localVars$addSymbol( cppVar(name = 'netIncrement_', baseType = 'int') )
+    copyIntoIndepVarCode[[1]] <- quote(netIncrement_ <- 1) 
+    ## getting the sizes is going to be trickier when an independent var is really an expression, in particular with indexing, like model$x[3]
+    ## for now let's assume only cleanly defined vars.
+    ## one approach would be intermediate variables
+    totalIndependentLength <- 0
+    for(ivn in seq_along(independentVarNames)) {
+        thisName <- independentVarNames[ivn]
+        thisSym <- nimbleSymTab$getSymbolObject(thisName)
+        if(thisSym$nDim > 0) {
+            thisSizes <- thisSym$size
+            sizeList <- lapply(thisSizes, function(x) c(1, x))
+            names(sizeList) <- indexVarNames[1:length(sizeList)]
+            newRcode <- makeCopyingCodeBlock(as.name(thisName), quote(ADindependentVars), sizeList, indicesRHS = FALSE, incrementIndex = quote(netIncrement_))
+            copyIntoIndepVarCode[[ivn+1]] <- newRcode 
+            totalIndependentLength <- totalIndependentLength + prod(thisSizes)
+        } else {
+            copyIntoIndepVarCode[[ivn+1]] <- substitute({LHS <- ADindependentVars[netIncrement_]; netIncrement_ <- netIncrement_ + 1}, list(LHS = as.name(thisName))) 
+            totalIndependentLength <- totalIndependentLength + 1
+        }
+    }
+
+    ## put dummy values in ADindependentVars
+    dummyValueRcode <- substitute(for(III in 1:TOTLENGTH) ADindependentVars[III] = 0.5, list(III = as.name(indexVarNames[1]), TOTLENGTH = totalIndependentLength))
+
+    ## call the taping function
+    tapingCallFunName <- paste0(targetFunDef$name,'_AD_') ## will need to handle operator() as a special case (or finally stop using it)
+    TCFcall <- do.call('call', c(list(tapingCallFunName), lapply(targetFunDef$args$getSymbolNames(), as.name)), quote = TRUE)
+    tapingCallRCode <- substitute(ANS_ <- TCF, list(TCF = TCFcall))
+    
+    ## make copying blocks from dependent vars
+    numDependentVars <- length(dependentVarNames)
+    copyFromDepVarCode <- vector('list', numDependentVars+1)
+    copyFromDepVarCode[[1]] <- quote(netIncrement_ <- 1) 
+    totalDepLength <- 0;
+    for(ivn in seq_along(dependentVarNames)) {
+        thisName <- dependentVarNames[ivn]
+        if(thisName == 'ANS_') {
+            thisSym <- targetFunDef$RCfunProc$compileInfo$returnSymbol
+        } else {
+            thisSym <- nimbleSymTab$getSymbolObject(thisName)
+        }
+        if(thisSym$nDim > 0) {
+            thisSizes <- thisSym$size
+            sizeList <- lapply(thisSizes, function(x) c(1, x))
+            names(sizeList) <- indexVarNames[1:length(sizeList)]
+            newRcode <- makeCopyingCodeBlock(quote(ADdependentVars), as.name(thisName), sizeList, indicesRHS = TRUE, incrementIndex = quote(netIncrement_))
+            copyFromDepVarCode[[ivn+1]] <- newRcode 
+            totalDepLength <- totalDepLength + prod(thisSizes)
+        } else {
+            copyFromDepVarCode[[ivn+1]] <- substitute({ADdependentVars[netIncrement_] <- RHS; netIncrement_ <- netIncrement_ + 1}, list(RHS = as.name(thisName))) 
+            totalDepLength <- totalDepLength + 1
+        }
+    }
+
+    ## Now that we know how big ADindependenVars and ADdependentVars should be, 
+    ## we can make two more entries to setSizeCalls for them
+    ## Note that code for these will appear above code that uses them.
+    setSizeLines[[iNextLine]] <- substitute(cppMemberFunction(resize(ADindependentVars, TIL)), list(TIL = totalIndependentLength))
+    iNextLine <- iNextLine + 1
+    setSizeLines[[iNextLine]] <- substitute(cppMemberFunction(resize(ADdependentVars, TDL)), list(TDL = totalDepLength))
+    
+    ## Finally put together all the code, parse it into the nimble exprClass system,
+    ## and add it to the result (CFT)
+    allRcode <- do.call('call', c(list('{'),setSizeLines, list(dummyValueRcode, CppADindependentCode), copyIntoIndepVarCode, list(tapingCallRCode), copyFromDepVarCode ), quote=TRUE)
+    allCode <- RparseTree2ExprClasses(allRcode)
+    CFT$code <- cppCodeBlock(code = allCode, objectDefs = localVars)
+    CFT
 }

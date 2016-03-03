@@ -241,18 +241,6 @@ toSEXPscalarConvertFunctions <- list(double  = 'double_2_SEXP',
                                      logical = 'bool_2_SEXP',
                                      character = 'string_2_STRSEXP')
 
-makeTypeTemplateFunction = function(newName, .self) { ## called from an existing version of the cppFunctionDef and returns a separate one
-    newCppFunDef <- RCfunctionDef$new()
-    newCppFunDef$name <- newName
-    newCppFunDef$template <- cppVarFull(name = character(), baseType = 'template', templateArgs = list('class TYPE_'))
-    newCppFunDef$args <- symbolTable2templateTypeSymbolTable(.self$args, addRef = TRUE)
-    localArgs <- symbolTable2templateTypeSymbolTable(.self$code$objectDefs)
-    newCppFunDef$returnType <- cppVarSym2templateTypeCppVarSym(.self$returnType)
-    newCppFunDef$code <- cppCodeBlock(code = .self$code$code, objectDefs = localArgs)
-    newCppFunDef
-},
-
-
 buildCopyLineFromSEXP <- function(fromSym, toSym) {
     if(inherits(toSym, 'symbolBasic')) {
         if(toSym$nDim == 0) {
