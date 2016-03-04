@@ -186,6 +186,11 @@ cppNimbleFunctionClass <- setRefClass('cppNimbleFunctionClass',
                                                   functionDefs[[newFunName]] <<- makeADtapingFunction(newFunName, regularFun, ADfunName, independentVarNames, dependentVarNames)
                                                   invisible(NULL)
                                               },
+                                              addADclassContent = function() {
+                                                  cppClass$objectDefs$addSymbol(cppVarFull(name = 'ADtapePtrs', static = TRUE, baseType = 'vector', templateArgs = list(cppVarFull(baseType = 'ADFun', templateArgs = list('double'), ptr = 1))))
+                                                  functionDefs[['static_record_all_tapes']] <<- makeStaticRecordAllTapesFunction()
+                                                  invisible(NULL)
+                                              },
                                               buildCmultiInterface = function(dll = NULL) {
                                                   sym <- if(!is.null(dll))
                                                              getNativeSymbolInfo(SEXPgeneratorFun$name, dll)

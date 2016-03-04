@@ -7,7 +7,7 @@ using namespace Eigen;
 typedef Stride<Dynamic, Dynamic> EigStrDyn;
 typedef Map<MatrixXd, Unaligned, EigStrDyn > EigenMapStr;
 
-template <class Type>
+template <typename Type>
 struct EigenTemplateTypes {
   typedef Matrix<Type, Dynamic, Dynamic> typeMatrixXd;
   typedef Map<typeMatrixXd, Unaligned, EigStrDyn > typeEigenMapStr;
