@@ -17,15 +17,19 @@ cppVarSym2templateTypeCppVarSym <- function(oldSym, addRef = FALSE, clearRef = F
                 newSym$ref <- FALSE
         }
     }
-    ## replacementTemplateArgs ignored for next two
-    else if(newSym$baseType == 'EigenMapStr') {
-        newSym$baseType <- paste0('typename EigenTemplateTypes<',replacementBaseType,'>::typeEigenMapStr')
-    }
-    else if(newSym$baseType == 'Map') {
-        if(newSym$templateArgs[[1]] == 'MatrixXd') {
-            newSym$templateArgs[[1]] <- 'typename EigenTemplateTypes<TYPE_>::typeMatrixXd'
-        }
-    }
+    ## original version generated use of EigenTemplateTypes<TYPE_>::some local typedef.
+    ## but this did not cover subsequent code like uses of new.
+    ## so instead now we generate a typedef at the top of a function to redefine EigenMapStr and MatrixXd and then everything else just works.
+    ##
+    ## ## replacementTemplateArgs ignored for next two
+    ## else if(newSym$baseType == 'EigenMapStr') {
+    ##     newSym$baseType <- paste0('typename EigenTemplateTypes<',replacementBaseType,'>::typeEigenMapStr')
+    ## }
+    ## else if(newSym$baseType == 'Map') {
+    ##     if(newSym$templateArgs[[1]] == 'MatrixXd') {
+    ##         newSym$templateArgs[[1]] <- 'typename EigenTemplateTypes<TYPE_>::typeMatrixXd'
+    ##     }
+    ## }
     newSym
 }
 ## Convert a symbol table for C++ vars into a symbol table for C++ for templated CppAD code
@@ -49,12 +53,19 @@ symbolTable2templateTypeSymbolTable <- function(symTab, addRef = FALSE, clearRef
 ## This is called from an existing version of the cppFunctionDef and returns a separate one
 makeTypeTemplateFunction = function(newName, .self) { 
     newCppFunDef <- RCfunctionDef$new(static = TRUE)
+
+    ## use typedefs to change nimble's general typedefs for Eigen locally
+    typeDefs <- symbolTable()
+    typeDefs$addSymbol(cppVarFull(baseType = "typedef typename EigenTemplateTypes<TYPE_>::typeEigenMapStr", name = "EigenMapStr") ) ## these coerces the cppVar system to generate a line of typedef code for us
+    typeDefs$addSymbol(cppVarFull(baseType = "typedef typename EigenTemplateTypes<TYPE_>::typeMatrixXd", name = "MatrixXd") )
+    
+    
     newCppFunDef$name <- newName
     newCppFunDef$template <- cppVarFull(name = character(), baseType = 'template', templateArgs = list('class TYPE_'))
     newCppFunDef$args <- symbolTable2templateTypeSymbolTable(.self$args, addRef = TRUE)
     localArgs <- symbolTable2templateTypeSymbolTable(.self$code$objectDefs)
     newCppFunDef$returnType <- cppVarSym2templateTypeCppVarSym(.self$returnType)
-    newCppFunDef$code <- cppCodeBlock(code = .self$code$code, objectDefs = localArgs)
+    newCppFunDef$code <- cppCodeBlock(code = .self$code$code, objectDefs = localArgs, typeDefs = typeDefs)
     newCppFunDef
 }
 
@@ -97,24 +108,26 @@ makeCopyingCodeBlock <- function(LHSvar, RHSvar, indexList, indicesRHS = TRUE, i
 makeADtapingFunction <- function(newFunName = 'callForADtaping', targetFunDef, ADfunName, independentVarNames, dependentVarNames) {
     ## Make new function definition to call for taping (CFT)
     CFT <- RCfunctionDef$new(static = TRUE)
-    CFT$returnType <- cppVoid()
+    CFT$returnType <- cppVarFull(baseType = "CppAD::ADFun", templateArgs = list('double'), ptr = 1, name = 'RETURN_TAPE_') ##cppVoid()
     CFT$name <- newFunName
-    ## args will always be same; these do not depend on
+    
+    ## args will always be same; these do not depend on case.  actually now these will be empty.
     CFT$args <- symbolTable()
-    ## create vector< AD<double> > ADindependentVars
-    ADindependentVarsSym <- cppVarFull(name = 'ADindependentVars', baseType = 'vector', templateArgs = list( cppVarFull(baseType = 'AD', templateArgs = 'double', name = character()) ), ref = TRUE)
-    ## create vector< AD<double> ADresponseVars
-    ADresponseVarsSym <- cppVarFull(name = 'ADresponseVars', baseType = 'vector', templateArgs = list( cppVarFull(baseType = 'AD', templateArgs = 'double', name = character()) ), ref = TRUE)
-    ## Add them to arguments symbol table
-    CFT$args$addSymbol( ADindependentVarsSym )
-    CFT$args$addSymbol( ADresponseVarsSym )
+    ## create vector< CppAD::AD<double> > ADindependentVars
+    ADindependentVarsSym <- cppVarFull(name = 'ADindependentVars', baseType = 'vector', templateArgs = list( cppVarFull(baseType = 'CppAD::AD', templateArgs = 'double', name = character()) ), ref = FALSE) ## was ref = TRUE if taking as argument
+    ## create vector< CppAD::AD<double> ADresponseVars
+    ADresponseVarsSym <- cppVarFull(name = 'ADresponseVars', baseType = 'vector', templateArgs = list( cppVarFull(baseType = 'CppAD::AD', templateArgs = 'double', name = character()) ), ref = FALSE) ## ditto
+    ## Add them to arguments symbol table ## switch design and make these local
+##    CFT$args$addSymbol( ADindependentVarsSym )
+##    CFT$args$addSymbol( ADresponseVarsSym )
 
     ## Make local AD variables for all function inputs and outputs
     ## e.g. if the original targetFun takes NimArr<1, double>, it's templated CppAD version will take NimArr<1, TYPE_>
     ## Next line creates local variables for passing to that templated CppAD version
-    localVars <- symbolTable2templateTypeSymbolTable(targetFunDef$args, clearRef = TRUE, replacementBaseType = 'AD', replacementTemplateArgs = list('double') )
+    localVars <- symbolTable2templateTypeSymbolTable(targetFunDef$args, clearRef = TRUE, replacementBaseType = 'CppAD::AD', replacementTemplateArgs = list('double') )
     ## and similar for the return variable
-    ansSym <- cppVarSym2templateTypeCppVarSym(targetFunDef$returnType, clearRef = TRUE, replacementBaseType = 'AD', replacementTemplateArgs = list('double'))
+    initADptrCode <- cppLiteral("RETURN_TAPE_ = new CppAD::ADFun<double>")
+    ansSym <- cppVarSym2templateTypeCppVarSym(targetFunDef$returnType, clearRef = TRUE, replacementBaseType = 'CppAD::AD', replacementTemplateArgs = list('double'))
     ansSym$name <- 'ANS_'
     localVars$addSymbol(ansSym)
     symNames <- localVars$getSymbolNames()
@@ -146,7 +159,11 @@ makeADtapingFunction <- function(newFunName = 'callForADtaping', targetFunDef, A
             setSizeLines[[iNextLine]] <- NULL
         }
     }
-    
+
+    localVars$addSymbol( ADindependentVarsSym )
+    localVars$addSymbol( ADresponseVarsSym )
+    localVars$addSymbol( CFT$returnType )
+
     ## call CppAD::Independent(ADindependentVars)
     ## This starts CppADs taping system
     CppADindependentCode <- quote(`CppAD::Independent`(ADindependentVars)) ##nimble:::RparseTree2ExprClasses(quote(`CppAD::Independent`(ADindependentVars)))
@@ -217,13 +234,35 @@ makeADtapingFunction <- function(newFunName = 'callForADtaping', targetFunDef, A
     setSizeLines[[iNextLine]] <- substitute(cppMemberFunction(resize(ADindependentVars, TIL)), list(TIL = totalIndependentLength))
     iNextLine <- iNextLine + 1
     setSizeLines[[iNextLine]] <- substitute(cppMemberFunction(resize(ADresponseVars, TDL)), list(TDL = totalDepLength))
+
+    ## line to finish taping
+    finishTapingCall <- cppLiteral('RETURN_TAPE_->Dependent(ADindependentVars, ADresponseVars)')
+
+    ADoptimizeCalls <- list(cppLiteral("std::cout<<\"size before optimize = \"<< RETURN_TAPE_->size_var() <<\"\\n\""),
+                            cppLiteral("RETURN_TAPE_->optimize();"),
+                            cppLiteral("std::cout<<\"size after optimize = \"<< RETURN_TAPE_->size_var() <<\"\\n\""))
+
+    returnCall <- cppLiteral("return(RETURN_TAPE_)")
     
     ## Finally put together all the code, parse it into the nimble exprClass system,
     ## and add it to the result (CFT)
-    allRcode <- do.call('call', c(list('{'),setSizeLines, list(dummyValueRcode, CppADindependentCode), copyIntoIndepVarCode, list(tapingCallRCode), copyFromDepVarCode ), quote=TRUE)
+    allRcode <- do.call('call', c(list('{'), setSizeLines, list(initADptrCode, dummyValueRcode, CppADindependentCode), copyIntoIndepVarCode, list(tapingCallRCode), copyFromDepVarCode, list(finishTapingCall), ADoptimizeCalls, list(returnCall)), quote=TRUE)
     allCode <- RparseTree2ExprClasses(allRcode)
     CFT$code <- cppCodeBlock(code = allCode, objectDefs = localVars)
     CFT
+}
+
+makeStaticInitClass <- function() {
+    cppClass <- nimble:::cppClassDef(name = 'initTest')
+    globalsDef <- nimble:::cppGlobalObjects(name = 'initTestGlobals')
+    globalsDef$objectDefs[['allADtapePtrs_']] <- nimble:::cppVarFull(baseType = 'vector', templateArgs = list(nimble:::cppVarFull(baseType = 'CppAD::ADFun', templateArgs = list('double'), ptr = 1)), static = TRUE, name = 'allADtapePtrs_')
+    
+    initializerDef <- nimble:::cppFunctionDef(name = 'initTest', returnType = nimble:::cppVoid())
+    initializerCode <- quote(a)
+    initializerDef$code <- nimble:::cppCodeBlock(code = initializerCode, objectDefs = list())
+    cppClass$functionDefs[['initializer']] <- initializerDef
+    cppClass$neededTypeDefs[['globals']] <- globalsDef
+    cppClass
 }
 
 makeStaticRecordAllTapesFunction <- function() {

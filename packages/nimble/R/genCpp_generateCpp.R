@@ -42,7 +42,8 @@ cppOutputCalls <- c(makeCallList(binaryMidOperators, 'cppOutputMidOperator'),
                          blank = 'cppOutputBlank',
                          callC = 'cppOutputEigBlank', ## not really eigen, but this just jumps over a layer in the parse tree
                          eigBlank = 'cppOutputEigBlank',
-                         voidPtr = 'cppOutputVoidPtr'
+                         voidPtr = 'cppOutputVoidPtr',
+                         cppLiteral = 'cppOutputLiteral'
                          )
                     )
 cppOutputCalls[['pow']] <-  'cppOutputPow'
@@ -363,3 +364,5 @@ cppOutputDereference <- function(code, symTab) {
 cppOutputTemplate <- function(code, symTab) {
     paste0(code$args[[1]]$name, '<', paste0(unlist(lapply(code$args[-1], nimGenerateCpp, symTab, asArg = TRUE) ), collapse = ', '), '>' )
 }
+
+cppOutputLiteral <- function(code, symTab) code$args[[1]]

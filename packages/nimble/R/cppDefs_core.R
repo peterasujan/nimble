@@ -10,9 +10,8 @@ cppDefinition <- setRefClass('cppDefinition',
                                  filename = 'ANY',	#'character',  ## what filename (to which .h and .cpp will be appended) is this definition in
                                  CPPusings = 'ANY',	#''character',
                                  neededTypeDefs = 'ANY',	#''list',
-                               
-                               Hincludes = 'list',
-                               CPPincludes = 'list',
+                                 Hincludes = 'list',
+                                 CPPincludes = 'list',
                                
                                  nimbleProject = 'ANY'),  
                              methods = list(
@@ -31,6 +30,21 @@ cppDefinition <- setRefClass('cppDefinition',
                              )
 
 
+cppGlobalObjects <- setRefClass('cppGlobalObject',
+                                contains = 'cppDefinition',
+                                field = list(
+                                    name = 'ANY',
+                                    objectDefs = 'ANY' ## a list or symbolTable
+                                ),
+                                methods = list(
+                                    initialize = function(...) {name <<- character(); objectDefs <<-list(); callSuper(...)},
+                                    generate = function(declaration = FALSE) {
+                                        objectDefsToUse <- if(inherits(objectDefs, 'symbolTable')) objectDefs$symbols else objectDefs
+                                        output <- generateAll(objectDefsToUse, declaration = declaration)
+                                        if(declaration) output <- paste("extern ", output)
+                                        output
+                                    }
+                                    ))
 ## class for C++ namespaces.
 ## A namespace includes, objects, classes, functions, typedefs, and other namespaces
 ## This is incomplete.  The typeDefs and nested namespaces are not used yet.
@@ -167,14 +181,20 @@ cppClassDef <- setRefClass('cppClassDef',
 ## A cppCodeBlock is an arbitrary collection of parse tree and other cppCodeBlocks (defined below)
 ## The parse tree can be either an R parse tree or one of our exprClass objects
 cppCodeBlock <- setRefClass('cppCodeBlock',
-                            fields = list(objectDefs = 'ANY', code = 'ANY', skipBrackets = 'ANY'),			#'logical'),
+                            fields = list(typeDefs = 'ANY', objectDefs = 'ANY', code = 'ANY', skipBrackets = 'ANY'),			#'logical'),
                             methods = list(
                                 generate = function(indent = '', ...) {
+                                    if(inherits(typeDefs, 'uninitializedField')) typeDefs <<- list()
+                                    typeDefsToUse <- if(inherits(typeDefs, 'symbolTable')) typeDefs$symbols else typeDefs
+                                    if(length(typeDefsToUse) > 0) {
+                                        outputCppCode <- paste0(indent, generateObjectDefs(typeDefsToUse),';')
+                                    } else outputCppCode <- list()
+                                    
                                     if(inherits(objectDefs, 'uninitializedField')) objectDefs <<- list()
                                     objectDefsToUse <- if(inherits(objectDefs, 'symbolTable')) objectDefs$symbols else objectDefs
                                     if(length(objectDefsToUse) > 0) {
-                                        outputCppCode <- paste0(indent, generateObjectDefs(objectDefsToUse),';')
-                                    } else outputCppCode <- list()
+                                        outputCppCode <- c(outputCppCode, paste0(indent, generateObjectDefs(objectDefsToUse),';'))
+                                    } ##else outputCppCode <- list()
 
                                     if(inherits(code, 'exprClass')) {
                                         if(!inherits(objectDefs, 'symbolTable')) stop('Error, with exprClass code in the cppCodeBlock, must have objectDefs be a symbolTable')

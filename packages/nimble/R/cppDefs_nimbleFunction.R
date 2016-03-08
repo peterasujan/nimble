@@ -184,13 +184,24 @@ cppNimbleFunctionClass <- setRefClass('cppNimbleFunctionClass',
                                                   regularFun <- RCfunDefs[[funName]]
                                                   newFunName <- 'callForADtaping'
                                                   functionDefs[[newFunName]] <<- makeADtapingFunction(newFunName, regularFun, ADfunName, independentVarNames, dependentVarNames)
+                                                  CPPincludes <<- c("<cppad/cppad.hpp>", CPPincludes)
+                                                  Hincludes <<- c("<cppad/cppad.hpp>", Hincludes)
                                                   invisible(NULL)
                                               },
-                                              addADclassContent = function() {
-                                                  cppClass$objectDefs$addSymbol(cppVarFull(name = 'ADtapePtrs', static = TRUE, baseType = 'vector', templateArgs = list(cppVarFull(baseType = 'ADFun', templateArgs = list('double'), ptr = 1))))
-                                                  functionDefs[['static_record_all_tapes']] <<- makeStaticRecordAllTapesFunction()
+                                              addStaticInitClass = function( funName ) {
+                                                  browser()
+                                                  objectDefs[['vectorADtapePtrs']] <<- cppVarFull(baseType = 'vector', templateArgs = list(cppVarFull(baseType = 'CppAD::ADFun', templateArgs = list('double'), ptr = 1)), static = TRUE, name = 'allADtapePtrs_')
+                                                  neededTypeDefs[['staticInitClass']] <<- makeStaticInitClass() ##
+                                                  globals <- cppGlobalObjects(name = 'staticInitObjGlobals')
+                                                  globals$objectDefs[['staticInitClassObject']] <- cppVarFull(baseType = 'initTest', name = 'initTestObject_')
+                                                  neededTypeDefs[['staticInitClassGlobals']] <<- globals 
                                                   invisible(NULL)
                                               },
+                                              ## addADclassContent = function() {
+                                              ##     cppClass$objectDefs$addSymbol(cppVarFull(name = 'ADtapePtrs', static = TRUE, baseType = 'vector', templateArgs = list(cppVarFull(baseType = 'ADFun', templateArgs = list('double'), ptr = 1))))
+                                              ##     functionDefs[['static_record_all_tapes']] <<- makeStaticRecordAllTapesFunction()
+                                              ##     invisible(NULL)
+                                              ## },
                                               buildCmultiInterface = function(dll = NULL) {
                                                   sym <- if(!is.null(dll))
                                                              getNativeSymbolInfo(SEXPgeneratorFun$name, dll)
