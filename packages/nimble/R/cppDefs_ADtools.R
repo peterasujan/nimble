@@ -253,23 +253,23 @@ makeADtapingFunction <- function(newFunName = 'callForADtaping', targetFunDef, A
 }
 
 makeStaticInitClass <- function() {
-    cppClass <- nimble:::cppClassDef(name = 'initTest')
-    globalsDef <- nimble:::cppGlobalObjects(name = 'initTestGlobals')
-    globalsDef$objectDefs[['allADtapePtrs_']] <- nimble:::cppVarFull(baseType = 'vector', templateArgs = list(nimble:::cppVarFull(baseType = 'CppAD::ADFun', templateArgs = list('double'), ptr = 1)), static = TRUE, name = 'allADtapePtrs_')
+    cppClass <- cppClassDef(name = 'initTest', useGenerator = FALSE)
+    globalsDef <- cppGlobalObjects(name = 'initTestGlobals')
+    globalsDef$objectDefs[['staticInitClassObject']] <- cppVarFull(baseType = 'initTest', name = 'initTestObject_')
     
-    initializerDef <- nimble:::cppFunctionDef(name = 'initTest', returnType = nimble:::cppVoid())
+    initializerDef <- cppFunctionDef(name = 'initTest', returnType = emptyTypeInfo())
     initializerCode <- quote(a)
-    initializerDef$code <- nimble:::cppCodeBlock(code = initializerCode, objectDefs = list())
+    initializerDef$code <- cppCodeBlock(code = initializerCode, objectDefs = list())
     cppClass$functionDefs[['initializer']] <- initializerDef
-    cppClass$neededTypeDefs[['globals']] <- globalsDef
+    cppClass$globalObjectsDefs[['globals']] <- globalsDef
     cppClass
 }
 
-makeStaticRecordAllTapesFunction <- function() {
-    initFunction <- RCfunctionDef$new()
-    initFunction$returnType <- cppVarFull(baseType = 'void', static = TRUE)
-    initFunction$args <- symbolTable()
-    code <- putCodeLinesInBrackets(list(cppLiteral("myclass::callForADtaping());"))) ## this will be a ADtapePtrs.push_back
-    initFunction$code <- cppCodeBlock(code = code, objectDefs = symbolTable())
-    initFunction
-}
+## makeStaticRecordAllTapesFunction <- function() {
+##     initFunction <- RCfunctionDef$new()
+##     initFunction$returnType <- cppVarFull(baseType = 'void', static = TRUE)
+##     initFunction$args <- symbolTable()
+##     code <- putCodeLinesInBrackets(list(cppLiteral("myclass::callForADtaping());"))) ## this will be a ADtapePtrs.push_back
+##     initFunction$code <- cppCodeBlock(code = code, objectDefs = symbolTable())
+##     initFunction
+## }

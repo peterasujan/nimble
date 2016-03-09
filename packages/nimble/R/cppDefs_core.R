@@ -34,13 +34,17 @@ cppGlobalObjects <- setRefClass('cppGlobalObject',
                                 contains = 'cppDefinition',
                                 field = list(
                                     name = 'ANY',
-                                    objectDefs = 'ANY' ## a list or symbolTable
+                                    objectDefs = 'ANY', ## a list or symbolTable
+                                    staticMembers = 'ANY'
                                 ),
                                 methods = list(
-                                    initialize = function(...) {name <<- character(); objectDefs <<-list(); callSuper(...)},
+                                    initialize = function(...) {name <<- character(); objectDefs <<-list(); staticMembers <<- FALSE; callSuper(...)},
                                     generate = function(declaration = FALSE) {
+                                        ## For globals for class static members, we want no declaration
+                                        ## Otherwise we want a declaration and put extern in front
+                                        if(staticMembers & declaration) return(character())
                                         objectDefsToUse <- if(inherits(objectDefs, 'symbolTable')) objectDefs$symbols else objectDefs
-                                        output <- generateAll(objectDefsToUse, declaration = declaration)
+                                        output <- paste0(generateAll(objectDefsToUse, declaration = declaration),';')
                                         if(declaration) output <- paste("extern ", output)
                                         output
                                     }
@@ -83,10 +87,13 @@ cppClassDef <- setRefClass('cppClassDef',
                                private = 'list',		#'list', ## a placeholder.  everything is public
                                useGenerator = 'ANY',		#'logical',
                                SEXPgeneratorFun = 'ANY', ## These will be cppFunctionDefs
-                               SEXPfinalizerFun = 'ANY'),
+                               SEXPfinalizerFun = 'ANY',
+                               globalObjectsDefs = 'ANY'
+                           ),
                            methods = list(
                                initialize = function(...) {
                                    useGenerator <<- TRUE
+                                   globalObjectsDefs <<- list()
                                    Hincludes <<-	c(Hincludes, '<Rinternals.h>')	
                                    CPPincludes <<-	c(CPPincludes, '<iostream>') 
                                    callSuper(...)
@@ -113,14 +120,17 @@ cppClassDef <- setRefClass('cppClassDef',
                                    CPPuse
                                },
                                getDefs = function() {
-                                   if(useGenerator) {
+                                   ans <- if(useGenerator) {
+                                       if(inherits(SEXPgeneratorFun, 'uninitializedField')) stop('Trying to getDefs from a CppClassDef with useGenerator==TRUE but SEXPgeneratorFun not defined')
                                        if(inherits(SEXPfinalizerFun, 'uninitializedField'))
                                            list(.self, SEXPgeneratorFun)
                                        else
                                            list(.self, SEXPgeneratorFun, SEXPfinalizerFun)
-                                   }
-                                   else
+                                   } else {
                                        list(.self)
+                                   }
+                                   if(length(globalObjectsDefs) > 0) ans <- c(ans, globalObjectsDefs)
+                                   ans
                                },
                                addInheritance = function(newI) inheritance <<- c(inheritance, newI),
                                setPrivate = function(name) private[[name]] <<- TRUE,

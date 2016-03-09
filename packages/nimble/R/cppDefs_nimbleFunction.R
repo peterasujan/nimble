@@ -189,19 +189,22 @@ cppNimbleFunctionClass <- setRefClass('cppNimbleFunctionClass',
                                                   invisible(NULL)
                                               },
                                               addStaticInitClass = function( funName ) {
-                                                  browser()
-                                                  objectDefs[['vectorADtapePtrs']] <<- cppVarFull(baseType = 'vector', templateArgs = list(cppVarFull(baseType = 'CppAD::ADFun', templateArgs = list('double'), ptr = 1)), static = TRUE, name = 'allADtapePtrs_')
                                                   neededTypeDefs[['staticInitClass']] <<- makeStaticInitClass() ##
-                                                  globals <- cppGlobalObjects(name = 'staticInitObjGlobals')
-                                                  globals$objectDefs[['staticInitClassObject']] <- cppVarFull(baseType = 'initTest', name = 'initTestObject_')
-                                                  neededTypeDefs[['staticInitClassGlobals']] <<- globals 
                                                   invisible(NULL)
                                               },
-                                              ## addADclassContent = function() {
-                                              ##     cppClass$objectDefs$addSymbol(cppVarFull(name = 'ADtapePtrs', static = TRUE, baseType = 'vector', templateArgs = list(cppVarFull(baseType = 'ADFun', templateArgs = list('double'), ptr = 1))))
-                                              ##     functionDefs[['static_record_all_tapes']] <<- makeStaticRecordAllTapesFunction()
-                                              ##     invisible(NULL)
-                                              ## },
+                                              addADclassContent = function() {
+                                                  cppClass$objectDefs$addSymbol(cppVarFull(name = 'allADtapePtrs_', static = TRUE, baseType = 'vector', templateArgs = list(cppVarFull(baseType = 'CppAD::ADFun', templateArgs = list('double'), ptr = 1))))
+                                                  addTypeTemplateFunction('operator()')
+                                                  addADtapingFunction('operator()', independentVarNames = c('ARG1_x_','ARG2_z_'), dependentVarNames = 'ANS_' )
+                                                  addStaticInitClass()
+                                                  ## static declaration in the class definition
+                                                  objectDefs[['vectorADtapePtrs']] <<- cppVarFull(baseType = 'vector', templateArgs = list(cppVarFull(baseType = 'CppAD::ADFun', templateArgs = list('double'), ptr = 1)), static = TRUE, name = 'allADtapePtrs_')
+                                                  ## globals to hold the global static definition
+                                                  globals <- cppGlobalObjects(name = 'staticGlobals', staticMembers = TRUE)
+                                                  globals$objectDefs[['staticGlobalTape']] <- cppVarFull(baseType = 'vector', templateArgs = list(cppVarFull(baseType = 'CppAD::ADFun', templateArgs = list('double'), ptr = 1)), name = 'genName::allADtapePtrs_')
+                                                  globalObjectsDefs[['allADtapePtrs_']] <<- globals
+                                                  invisible(NULL)
+                                              },
                                               buildCmultiInterface = function(dll = NULL) {
                                                   sym <- if(!is.null(dll))
                                                              getNativeSymbolInfo(SEXPgeneratorFun$name, dll)
