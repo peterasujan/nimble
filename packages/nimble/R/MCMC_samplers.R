@@ -41,6 +41,8 @@ sampler_end <- nimbleFunction(
 sampler_binary <- nimbleFunction(
     contains = sampler_BASE,
     setup = function(model, mvSaved, target, control) {
+        targetAsScalar <- model$expandNodeNames(target, returnScalarComponents = TRUE)
+        if(length(targetAsScalar) > 1)     stop('cannot use binary sampler on more than one target node')
         if(!model$isBinary(target))     stop('can only use binary sampler on discrete 0/1 (binary) nodes')
         ###  node list generation  ###
         calcNodes  <- model$getDependencies(target)
@@ -49,7 +51,7 @@ sampler_binary <- nimbleFunction(
         currentProb <- exp(getLogProb(model, calcNodes))
         model[[target]] <<- 1 - model[[target]]
         otherProb <- exp(calculate(model, calcNodes))
-        if(runif(1,0,1) < otherProb/(currentProb+otherProb))
+        if(!is.nan(otherProb) & runif(1,0,1) < otherProb/(currentProb+otherProb))
             nimCopy(from = model, to = mvSaved, row = 1, nodes = calcNodes, logProb = TRUE)
         else
             nimCopy(from = mvSaved, to = model, row = 1, nodes = calcNodes, logProb = TRUE)
@@ -682,6 +684,12 @@ sampler_crossLevel <- nimbleFunction(
 #' \code{mcmcspec$addSampler(target = targetnode, type = samplertype, control = controllist)}
 #' 
 #' where \code{controllist} is a named list, with elements specific to \code{samplertype}.  The default values for control list elements are determined by the NIMBLE system option \code{'MCMCcontrolDefaultList'}.  Descriptions of each sampling algorithm, and the possible customizations for each sampler (using the control argument) appear below. 
+#' 
+#' @section binary sampler:
+#' 
+#' The binary sampler performs Gibbs sampling for binary-valued (discrete 0/1) nodes.  This can only be used for nodes following either a \code{dbern(p)} or \code{dbinom(p, size=1)} distribution.
+#' 
+#' The binary sampler accepts no control list arguments. 
 #' 
 #' @section RW sampler:
 #' 
